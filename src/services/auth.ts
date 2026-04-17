@@ -20,8 +20,13 @@ function mapUser(user: IdentityPayload | null): SessionUser | null {
 }
 
 function normaliseAuthError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return "Authentication is unavailable right now.";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  if (message.toLowerCase().includes("email not confirmed")) {
+    return "Please confirm your email first, then sign in again.";
+  }
+
+  return message || "Authentication is unavailable right now.";
 }
 
 export async function initializeIdentity() {
@@ -48,13 +53,21 @@ export async function initializeIdentity() {
 }
 
 export async function loginWithIdentity(email: string, password: string): Promise<SessionUser> {
-  const user = (await login(email, password)) as IdentityPayload;
-  return mapUser(user)!;
+  try {
+    const user = (await login(email, password)) as IdentityPayload;
+    return mapUser(user)!;
+  } catch (error) {
+    throw new Error(normaliseAuthError(error));
+  }
 }
 
 export async function signupWithIdentity(email: string, password: string, fullName: string): Promise<SessionUser> {
-  const user = (await signup(email, password, { full_name: fullName })) as IdentityPayload;
-  return mapUser(user)!;
+  try {
+    const user = (await signup(email, password, { full_name: fullName })) as IdentityPayload;
+    return mapUser(user)!;
+  } catch (error) {
+    throw new Error(normaliseAuthError(error));
+  }
 }
 
 export async function logoutIdentity() {
