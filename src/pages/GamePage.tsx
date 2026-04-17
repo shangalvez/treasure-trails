@@ -31,15 +31,18 @@ export function GamePage() {
   const parsed = useMemo(() => (level ? parseMaze(level) : null), [level]);
 
   useEffect(() => {
-    if (!level || !parsed) return;
-    setPosition(parsed.start);
-    setMoveCount(0);
-    setPaused(false);
-    setShowVictory(false);
-    setVictoryMedal(null);
-    setVisited(new Set([`${parsed.start.x},${parsed.start.y}`]));
-    void rememberCurrentLevel(level.id);
-  }, [level, parsed, rememberCurrentLevel]);
+  if (!level || !parsed) return;
+
+  setPosition(parsed.start);
+  setMoveCount(0);
+  setPaused(false);
+  setShowVictory(false);
+  setVictoryMedal(null);
+  setVisited(new Set([`${parsed.start.x},${parsed.start.y}`]));
+
+  void rememberCurrentLevel(level.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [level?.id, parsed?.start.x, parsed?.start.y]);
 
   const handleMove = useCallback(async (direction: "up" | "down" | "left" | "right") => {
     if (!level || !parsed || paused || showVictory) return;
