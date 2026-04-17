@@ -31,7 +31,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight">Treasure Trails</h1>
-              <p className="text-sm text-slate-600">Cute treasure hunts with private player progress.</p>
+              <p className="text-sm text-slate-600">Semoga Anda menikmatinya, dibuat oleh Shan Handsome.</p>
             </div>
           </div>
 
