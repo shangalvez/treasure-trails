@@ -282,74 +282,134 @@ export function GameProvider({ children }: PropsWithChildren) {
     [updateProfile],
   );
 
-  const loginWithPassword = useCallback(async (email: string, password: string) => {
-    const user = await loginWithIdentity(email, password);
-    const key = getUserStorageKey(user.id);
-    storageKeyRef.current = key;
+ const loginWithPassword = useCallback(async (email: string, password: string) => {
+  const user = await loginWithIdentity(email, password);
 
-    const local = loadProfileFromLocal(key);
+  const guestKey = getGuestStorageKey();
+  const userKey = getUserStorageKey(user.id);
+  storageKeyRef.current = userKey;
+
+  const guestLocal = loadProfileFromLocal(guestKey);
+  const userLocal = loadProfileFromLocal(userKey);
+
+  let remote: PlayerProfile | null = null;
+
+  try {
+    remote = await fetchRemoteProfile();
+  } catch {
+    remote = null;
+  }
+
+  const mergedLocal = mergeProfiles(guestLocal, userLocal);
+  const merged = mergeProfiles(mergedLocal, remote);
+
+  saveProfileToLocal(userKey, merged);
+
+  setSession({
+    status: "authenticated",
+    identityEnabled: true,
+    demoMode,
+    user,
+    error: null,
+  });
+  setProfile(merged);
+
+  if (navigator.onLine) {
+    try {
+      const saved = await saveRemoteProfile({
+        ...merged,
+        pendingRemoteSync: false,
+      });
+      saveProfileToLocal(userKey, saved);
+      setProfile(saved);
+    } catch {
+      const queued = { ...merged, pendingRemoteSync: true };
+      saveProfileToLocal(userKey, queued);
+      setProfile(queued);
+    }
+  }
+}, [demoMode]);
+
+  const signupWithPassword = useCallback(async (email: string, password: string, fullName: string) => {
+  const createdUser = await signupWithIdentity(email, password, fullName);
+
+  const guestKey = getGuestStorageKey();
+  const userKey = getUserStorageKey(createdUser.id);
+
+  const localGuest = loadProfileFromLocal(guestKey);
+  const existingUserLocal = loadProfileFromLocal(userKey);
+  const starter = mergeProfiles(localGuest, existingUserLocal);
+
+  const seeded: PlayerProfile = {
+    ...starter,
+    playerName: fullName.trim() || starter.playerName,
+    pendingRemoteSync: true,
+    lastUpdated: new Date().toISOString(),
+  };
+
+  saveProfileToLocal(userKey, seeded);
+
+  const auth = await initializeIdentity();
+
+  if (auth.user && auth.user.id === createdUser.id) {
+    storageKeyRef.current = userKey;
+
     let remote: PlayerProfile | null = null;
-
     try {
       remote = await fetchRemoteProfile();
     } catch {
       remote = null;
     }
 
-    const merged = mergeProfiles(local, remote);
-    saveProfileToLocal(key, merged);
+    const merged = mergeProfiles(seeded, remote);
+    saveProfileToLocal(userKey, merged);
 
     setSession({
       status: "authenticated",
-      identityEnabled: true,
+      identityEnabled: auth.identityEnabled,
       demoMode,
-      user,
-      error: null,
+      user: auth.user,
+      error: auth.error,
     });
     setProfile(merged);
 
-    if (merged.pendingRemoteSync && navigator.onLine) {
-      const saved = await saveRemoteProfile({
-        ...merged,
-        pendingRemoteSync: false,
-      });
-      saveProfileToLocal(key, saved);
-      setProfile(saved);
-    }
-  }, [demoMode, syncProfileNow]);
-
-  const signupWithPassword = useCallback(async (email: string, password: string, fullName: string) => {
-    const user = await signupWithIdentity(email, password, fullName);
-    const key = getUserStorageKey(user.id);
-    storageKeyRef.current = key;
-
-    const localGuest = loadProfileFromLocal(getGuestStorageKey());
-    const starter = mergeProfiles(localGuest, createEmptyProfile());
-    const seeded = {
-      ...starter,
-      playerName: fullName.trim() || starter.playerName,
-      pendingRemoteSync: true,
-    };
-
-    saveProfileToLocal(key, seeded);
-    setSession({
-      status: "authenticated",
-      identityEnabled: true,
-      demoMode,
-      user,
-      error: null,
-    });
-    setProfile(seeded);
-
     if (navigator.onLine) {
-      const saved = await saveRemoteProfile({
-        ...seeded,
-        pendingRemoteSync: false,
-      });
-      saveProfileToLocal(key, saved);
-      setProfile(saved);
+      try {
+        const saved = await saveRemoteProfile({
+          ...merged,
+          pendingRemoteSync: false,
+        });
+        saveProfileToLocal(userKey, saved);
+        setProfile(saved);
+      } catch {
+        const queued = { ...merged, pendingRemoteSync: true };
+        saveProfileToLocal(userKey, queued);
+        setProfile(queued);
+      }
     }
-  }, [demoMode, syncProfileNow]);
+
+    return;
+  }
+
+  storageKeyRef.current = guestKey;
+
+  const guestCopy: PlayerProfile = {
+    ...seeded,
+    pendingRemoteSync: false,
+    lastUpdated: new Date().toISOString(),
+  };
+
+  saveProfileToLocal(guestKey, guestCopy);
+
+  setSession({
+    status: "guest",
+    identityEnabled: true,
+    demoMode,
+    user: null,
+    error: null,
+  });
+  setProfile(guestCopy);
+}, [demoMode]);
 
   const logoutUser = useCallback(async () => {
     await logoutIdentity();
